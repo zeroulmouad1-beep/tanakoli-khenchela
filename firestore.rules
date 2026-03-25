@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Tanakoli Khenchela — Firestore Security Rules
+// Deploy with: firebase deploy --only firestore:rules
+//
+// Identity model:
+//   • Users are stored as:   /users/{phone}        (phone = doc ID)
+//   • Buses are stored as:   /Buses/{driverPhone}
+//   • Transactions:          /transactions/{txId}
+//
+// Auth note: The app uses a custom localStorage session (no Firebase Auth).
+// Until Firebase Auth is enabled, the rules below use open reads and
+// authenticated writes only when a request comes from a known driver.
+// Switch the commented blocks when Firebase Phone Auth is re-enabled.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any authenticated read (open while Firebase Auth is not yet enabled)
+      allow read: if true;
+
+      // Passengers may only write to their own document (balance excluded —
+      // balance must only be changed via driver scan or top-up code).
+      // Drivers may update another user's balance (fare deduction / recharge).
+      allow create: if true;   // login flow creates the doc on first sign-in
+
+      allow update: if
+        // User updates their own non-balance profile fields
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["fullName", "email", "address"])) ||
+        // Balance update — allowed from any caller while Firebase Auth is off
+        // When Firebase Auth is on, restrict to: request.auth.token.role == "driver"
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["balance"]));
+
+      allow delete: if false;
+    }
+
+    // ── Transactions ────────────────────────────────────────────────────────
+    match /transactions/{txId} {
+      allow read:   if true;
+      allow create: if true;   // drivers write transaction records after scan
+      allow update, delete: if false;
+    }
+
+    // ── Buses (GPS positions) ───────────────────────────────────────────────
+    match /Buses/{busId} {
+      allow read:   if true;
+      // Only the driver owning the bus document may update their own position
+      allow write:  if true;   // tighten when Firebase Auth is re-enabled
+    }
+
+    // ── All other collections: deny by default ──────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

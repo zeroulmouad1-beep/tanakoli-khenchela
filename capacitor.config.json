@@ -1,0 +1,6 @@
+{
+  "appId": "com.tanakoli.app",
+  "appName": "Tanakoli",
+  "webDir": "out",
+  "bundledWebRuntime": false
+}
